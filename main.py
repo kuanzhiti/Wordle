@@ -22,6 +22,9 @@ class WordleWindow(QMainWindow):
     COLOR_YELLOW = "#C9B458"
     COLOR_GREY = "#787C7E"
     COLOR_KEY_BG = "#D3D6DA"
+    
+    COLOR_INVALID_BG = "#FADBD8"
+    COLOR_INVALID_BORDER = "#E74C3C"
 
     KEYBOARD_LAYOUT = [
         ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -40,6 +43,7 @@ class WordleWindow(QMainWindow):
         self.current_row = 0
         self.current_col = 0
         self.current_guess: List[str] = []
+        self.invalid_guess = False
         
         self.grid_labels: List[List[QLabel]] = []
         self.key_buttons: Dict[str, QPushButton] = {}
@@ -49,7 +53,7 @@ class WordleWindow(QMainWindow):
         self.start_new_game(length=5)
 
     def init_ui(self):
-        self.setWindowTitle("Python PyQt5 Wordle")
+        self.setWindowTitle("Wordle")
         self.setMinimumSize(520, 720)
         self.setStyleSheet(f"background-color: {self.COLOR_DEFAULT_BG};")
 
@@ -100,7 +104,7 @@ class WordleWindow(QMainWindow):
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["4 Letters", "5 Letters", "6 Letters"])
         self.mode_combo.setCurrentIndex(1)
-        self.mode_combo.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
+        self.mode_combo.setFocusPolicy(Qt.NoFocus)
         self.mode_combo.setStyleSheet("""
             QComboBox {
                 padding: 6px 12px;
@@ -117,7 +121,7 @@ class WordleWindow(QMainWindow):
         # New Game Button
         reset_btn = QPushButton("New Game")
         reset_btn.setCursor(Qt.PointingHandCursor)
-        reset_btn.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
+        reset_btn.setFocusPolicy(Qt.NoFocus)
         reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self.COLOR_TEXT_DARK};
@@ -191,6 +195,15 @@ class WordleWindow(QMainWindow):
                     border-radius: 4px;
                 }}
             """)
+        elif state == "invalid":
+            label.setStyleSheet(f"""
+                QLabel {{
+                    border: 2px solid {self.COLOR_INVALID_BORDER};
+                    background-color: {self.COLOR_INVALID_BG};
+                    color: {self.COLOR_TEXT_DARK};
+                    border-radius: 4px;
+                }}
+            """)
         elif state == LetterState.GREEN:
             label.setStyleSheet(f"""
                 QLabel {{
@@ -238,7 +251,7 @@ class WordleWindow(QMainWindow):
             for key in row_keys:
                 btn = QPushButton(key)
                 btn.setCursor(Qt.PointingHandCursor)
-                btn.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
+                btn.setFocusPolicy(Qt.NoFocus)
                 
                 if key in ("ENTER", "⌫"):
                     btn.setFixedWidth(64)
@@ -279,6 +292,7 @@ class WordleWindow(QMainWindow):
         self.current_row = 0
         self.current_col = 0
         self.current_guess = []
+        self.invalid_guess = False
         self.key_states.clear()
         self.status_label.setText("")
 
@@ -287,8 +301,7 @@ class WordleWindow(QMainWindow):
         for key, btn in self.key_buttons.items():
             self.update_key_style(btn, self.COLOR_KEY_BG, self.COLOR_TEXT_DARK)
 
-        # Re-assign keyboard focus to main window
-        self.setFocus()  # <--- Always focus window on start
+        self.setFocus()
 
     # --- Input Handling ---
 
@@ -301,10 +314,13 @@ class WordleWindow(QMainWindow):
         if Qt.Key_A <= key_code <= Qt.Key_Z:
             char = chr(key_code).upper()
             self.handle_character(char)
+            event.accept()
         elif key_code in (Qt.Key_Backspace, Qt.Key_Delete):
             self.handle_backspace()
+            event.accept()
         elif key_code in (Qt.Key_Return, Qt.Key_Enter):
             self.handle_enter()
+            event.accept()
 
     def handle_key_input(self, key_text: str):
         if self.engine.is_game_over:
@@ -318,6 +334,22 @@ class WordleWindow(QMainWindow):
             self.handle_character(key_text)
 
     def handle_character(self, char: str):
+        # If previous word was invalid, move to next row on the next typed character
+        if self.invalid_guess:
+            self.invalid_guess = False
+            self.current_row += 1
+            self.current_col = 0
+            self.current_guess = []
+            self.status_label.setText("")
+
+            # Check if advancing rows reached maximum allowed attempts
+            if self.current_row >= self.engine.max_attempts:
+                self.engine.is_game_over = True
+                self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #787C7E;")
+                self.status_label.setText(f"Game Over! The word was: {self.engine.target_word}")
+                QMessageBox.warning(self, "Game Over", f"Out of attempts! The correct word was '{self.engine.target_word}'.")
+                return
+
         if self.current_col < self.engine.word_length:
             lbl = self.grid_labels[self.current_row][self.current_col]
             self.set_tile_style(lbl, "active", char)
@@ -326,6 +358,13 @@ class WordleWindow(QMainWindow):
             self.status_label.setText("")
 
     def handle_backspace(self):
+        # If Backspace is pressed after an invalid word, restore active styling to edit
+        if self.invalid_guess:
+            for i, lbl in enumerate(self.grid_labels[self.current_row]):
+                self.set_tile_style(lbl, "active", self.current_guess[i])
+            self.invalid_guess = False
+            self.status_label.setText("")
+
         if self.current_col > 0:
             self.current_col -= 1
             self.current_guess.pop()
@@ -337,6 +376,7 @@ class WordleWindow(QMainWindow):
     def handle_enter(self):
         if len(self.current_guess) < self.engine.word_length:
             self.status_label.setText("Not enough letters!")
+            self.setFocus()
             return
 
         guess_str = "".join(self.current_guess)
@@ -344,6 +384,11 @@ class WordleWindow(QMainWindow):
 
         if not valid:
             self.status_label.setText(msg)
+            # Highlight invalid row in red
+            for lbl in self.grid_labels[self.current_row]:
+                self.set_tile_style(lbl, "invalid")
+            self.invalid_guess = True
+            self.setFocus()
             return
 
         for col, color in enumerate(colors):
@@ -358,7 +403,7 @@ class WordleWindow(QMainWindow):
             QMessageBox.information(self, "Victory!", f"Splendid! You guessed '{self.engine.target_word}'!")
             self.setFocus()
         elif self.engine.is_game_over:
-            self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #787C7E;")
+            self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #6AAA64;")
             self.status_label.setText(f"Game Over! The word was: {self.engine.target_word}")
             QMessageBox.warning(self, "Game Over", f"Out of attempts! The correct word was '{self.engine.target_word}'.")
             self.setFocus()
@@ -366,6 +411,8 @@ class WordleWindow(QMainWindow):
             self.current_row += 1
             self.current_col = 0
             self.current_guess = []
+            self.invalid_guess = False
+            self.setFocus()
 
     def update_keyboard_colors(self, guess: str, colors: List[str]):
         color_map = {
