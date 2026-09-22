@@ -33,6 +33,9 @@ class WordleWindow(QMainWindow):
         super().__init__()
         self.engine = WordleEngine()
         
+        # Ensure window receives key events
+        self.setFocusPolicy(Qt.StrongFocus)
+        
         # UI State Tracking
         self.current_row = 0
         self.current_col = 0
@@ -40,7 +43,7 @@ class WordleWindow(QMainWindow):
         
         self.grid_labels: List[List[QLabel]] = []
         self.key_buttons: Dict[str, QPushButton] = {}
-        self.key_states: Dict[str, str] = {}  # Stores 'green', 'yellow', 'grey'
+        self.key_states: Dict[str, str] = {}
 
         self.init_ui()
         self.start_new_game(length=5)
@@ -50,17 +53,16 @@ class WordleWindow(QMainWindow):
         self.setMinimumSize(520, 720)
         self.setStyleSheet(f"background-color: {self.COLOR_DEFAULT_BG};")
 
-        # Main Layout Container
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self.main_layout = QVBoxLayout(central_widget)
         self.main_layout.setContentsMargins(16, 16, 16, 16)
         self.main_layout.setSpacing(12)
 
-        # 1. Header / Controls Bar
+        # 1. Header
         self.create_header()
 
-        # 2. Status / Message Banner
+        # 2. Status Banner
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet(
@@ -68,14 +70,14 @@ class WordleWindow(QMainWindow):
         )
         self.main_layout.addWidget(self.status_label)
 
-        # 3. Dynamic Letter Grid Area
+        # 3. Dynamic Grid Area
         self.grid_container = QWidget()
         self.grid_layout = QGridLayout(self.grid_container)
         self.grid_layout.setSpacing(6)
         self.grid_layout.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.grid_container, stretch=1)
 
-        # 4. On-Screen Virtual Keyboard
+        # 4. Virtual Keyboard
         self.keyboard_container = QWidget()
         self.keyboard_layout = QVBoxLayout(self.keyboard_container)
         self.keyboard_layout.setSpacing(6)
@@ -89,7 +91,6 @@ class WordleWindow(QMainWindow):
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Game Title
         title_label = QLabel("WORDLE")
         title_label.setStyleSheet(
             f"font-size: 32px; font-weight: 800; color: {self.COLOR_TEXT_DARK}; letter-spacing: 2px;"
@@ -98,7 +99,8 @@ class WordleWindow(QMainWindow):
         # Mode Selection Dropdown
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["4 Letters", "5 Letters", "6 Letters"])
-        self.mode_combo.setCurrentIndex(1)  # Default to 5 Letters
+        self.mode_combo.setCurrentIndex(1)
+        self.mode_combo.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
         self.mode_combo.setStyleSheet("""
             QComboBox {
                 padding: 6px 12px;
@@ -112,9 +114,10 @@ class WordleWindow(QMainWindow):
         """)
         self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
 
-        # Reset / New Game Button
+        # New Game Button
         reset_btn = QPushButton("New Game")
         reset_btn.setCursor(Qt.PointingHandCursor)
+        reset_btn.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
         reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self.COLOR_TEXT_DARK};
@@ -138,15 +141,12 @@ class WordleWindow(QMainWindow):
 
         self.main_layout.addWidget(header_widget)
 
-        # Divider Line
         divider = QFrame()
         divider.setFrameShape(QFrame.HLine)
         divider.setStyleSheet("color: #E5E7EB;")
         self.main_layout.addWidget(divider)
 
     def create_grid(self, length: int):
-        """Clears existing grid and creates a 6-row x N-col grid of QLabels."""
-        # Clear existing grid widgets
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             widget = item.widget()
@@ -170,7 +170,6 @@ class WordleWindow(QMainWindow):
             self.grid_labels.append(row_labels)
 
     def set_tile_style(self, label: QLabel, state: str, letter: str = ""):
-        """Applies stylesheet to individual grid cells based on state."""
         if letter:
             label.setText(letter.upper())
 
@@ -221,8 +220,6 @@ class WordleWindow(QMainWindow):
             """)
 
     def create_keyboard(self):
-        """Constructs the virtual QWERTY keyboard layout."""
-        # Clear existing keyboard layout
         while self.keyboard_layout.count():
             item = self.keyboard_layout.takeAt(0)
             widget = item.widget()
@@ -241,8 +238,8 @@ class WordleWindow(QMainWindow):
             for key in row_keys:
                 btn = QPushButton(key)
                 btn.setCursor(Qt.PointingHandCursor)
+                btn.setFocusPolicy(Qt.NoFocus)  # <--- Prevent stealing focus
                 
-                # Special key styling
                 if key in ("ENTER", "⌫"):
                     btn.setFixedWidth(64)
                     btn.setFont(QFont("Arial", 11, QFont.Bold))
@@ -278,7 +275,6 @@ class WordleWindow(QMainWindow):
         self.start_new_game(selected_length)
 
     def start_new_game(self, length: int):
-        """Resets engine and UI state for a new session."""
         self.engine.start_new_game(length=length, max_attempts=6)
         self.current_row = 0
         self.current_col = 0
@@ -286,17 +282,17 @@ class WordleWindow(QMainWindow):
         self.key_states.clear()
         self.status_label.setText("")
 
-        # Rebuild grid
         self.create_grid(length)
 
-        # Reset keyboard colors
         for key, btn in self.key_buttons.items():
             self.update_key_style(btn, self.COLOR_KEY_BG, self.COLOR_TEXT_DARK)
+
+        # Re-assign keyboard focus to main window
+        self.setFocus()  # <--- Always focus window on start
 
     # --- Input Handling ---
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Captures physical hardware keyboard keypresses."""
         if self.engine.is_game_over:
             return
 
@@ -311,7 +307,6 @@ class WordleWindow(QMainWindow):
             self.handle_enter()
 
     def handle_key_input(self, key_text: str):
-        """Handles virtual on-screen keyboard button clicks."""
         if self.engine.is_game_over:
             return
 
@@ -351,31 +346,28 @@ class WordleWindow(QMainWindow):
             self.status_label.setText(msg)
             return
 
-        # 1. Update Grid Cell Colors
         for col, color in enumerate(colors):
             lbl = self.grid_labels[self.current_row][col]
             self.set_tile_style(lbl, color)
 
-        # 2. Update Virtual Keyboard Colors
         self.update_keyboard_colors(guess_str, colors)
 
-        # 3. Check Game Over State
         if self.engine.is_won:
             self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #6AAA64;")
             self.status_label.setText("🎉 Splendid! You guessed the word!")
-            # QMessageBox.information(self, "Victory!", f"Splendid! You guessed '{self.engine.target_word}'!")
+            QMessageBox.information(self, "Victory!", f"Splendid! You guessed '{self.engine.target_word}'!")
+            self.setFocus()
         elif self.engine.is_game_over:
             self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #787C7E;")
             self.status_label.setText(f"Game Over! The word was: {self.engine.target_word}")
-            # QMessageBox.warning(self, "Game Over", f"Out of attempts! The correct word was '{self.engine.target_word}'.")
+            QMessageBox.warning(self, "Game Over", f"Out of attempts! The correct word was '{self.engine.target_word}'.")
+            self.setFocus()
         else:
-            # Advance to next row
             self.current_row += 1
             self.current_col = 0
             self.current_guess = []
 
     def update_keyboard_colors(self, guess: str, colors: List[str]):
-        """Updates virtual key colors according to priority (Green > Yellow > Grey)."""
         color_map = {
             LetterState.GREEN: (self.COLOR_GREEN, self.COLOR_TEXT_LIGHT, 3),
             LetterState.YELLOW: (self.COLOR_YELLOW, self.COLOR_TEXT_LIGHT, 2),
@@ -387,7 +379,6 @@ class WordleWindow(QMainWindow):
                 current_state = self.key_states.get(char, None)
                 new_priority = color_map[color][2]
                 
-                # Check priority to avoid overwriting green with yellow/grey
                 current_priority = color_map[current_state][2] if current_state else 0
                 if new_priority > current_priority:
                     self.key_states[char] = color
