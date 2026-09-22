@@ -27,3 +27,33 @@ def build_word_lists():
 
 if __name__ == "__main__":
     build_word_lists()
+
+SOURCES = {
+    4: "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa.txt",
+    5: "https://raw.githubusercontent.com/tabatkins/wordle-list/main/words", # Official Wordle answer list
+    6: "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa.txt"
+}
+
+def build_target_lists():
+    print("Building curated target lists...")
+
+    for length in [4, 5, 6]:
+        url = SOURCES[length]
+        print(f"Fetching common {length}-letter words...")
+        req = urllib.request.urlopen(url)
+        raw_words = req.read().decode('utf-8').splitlines()
+
+        # Filter for exact length and alphabetical characters
+        targets = sorted(list(set(
+            w.strip().upper() for w in raw_words
+            if len(w.strip()) == length and w.strip().isalpha()
+        )))
+
+        filename = f"targets_{length}.txt"
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("\n".join(targets))
+
+        print(f"Saved {len(targets)} common words to {filename}")
+
+if __name__ == "__main__":
+    build_target_lists()
